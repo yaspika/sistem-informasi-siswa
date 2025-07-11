@@ -1,112 +1,1500 @@
 <!DOCTYPE html>
 <html lang="id">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sistem Informasi Siswa</title>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Informasi Siswa - MTs Yaspika Karangtawang</title>
+    
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.5/xlsx.full.min.js"></script>
+    
+    <!-- React & Babel -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  </head>
-  <body class="bg-gray-100 text-gray-900">
+    
+    <!-- Icons: Lucide -->
+    <script src="https://unpkg.com/lucide-react@0.378.0/dist/lucide-react.js"></script>
+    
+    <!-- PDF Generation: jsPDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+    <!-- Firebase -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // Expose to global scope for React components
+        window.firebase = {
+            initializeApp,
+            getAuth,
+            signInAnonymously,
+            onAuthStateChanged,
+            signInWithCustomToken,
+            getFirestore,
+            setLogLevel
+        };
+    </script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5;
+        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 50;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 0.5rem;
+            max-width: 90%;
+            width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .sidebar-item.active {
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white;
+            font-weight: 600;
+        }
+        .text-3d {
+            text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.2);
+        }
+        .title-3d {
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
     <div id="root"></div>
-    <script type="text/babel">
-      const {{ useState, useEffect }} = React;
 
-      function App() {{
-        const [tab, setTab] = useState("siswa");
-        const [data, setData] = useState([]);
-        const [input, setInput] = useState({{ nama: "", nis: "", kelas: "", jenis_kelamin: "" }});
+    <script type="text/babel" data-type="module">
+        // Import Firebase functions from global scope
+        const { initializeApp } = window.firebase;
+        const { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } = window.firebase;
+        const { getFirestore, collection, doc, addDoc, getDocs, onSnapshot, deleteDoc, updateDoc, query, where, writeBatch, setLogLevel } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+        
+        const { useState, useEffect, useMemo, useCallback, useRef } = React;
 
-        const handleChange = (e) => {{
-          const {{ name, value }} = e.target;
-          setInput((prev) => ({{ ...prev, [name]: value }}));
-        }};
+        // --- Firebase Configuration ---
+        // This pattern handles both the Canvas environment (using __firebase_config) and external hosting (using the hardcoded config).
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : {
+                apiKey: "AIzaSyC9U1oHDeF0wrwYVLLyJo3L6rmKBCbOQtA",
+                authDomain: "sistem-siswa-yaspika.firebaseapp.com",
+                projectId: "sistem-siswa-yaspika",
+                storageBucket: "sistem-siswa-yaspika.appspot.com",
+                messagingSenderId: "78708415258",
+                appId: "1:78708415258:web:27c5f21fbcd0fd451d2aa3"
+              };
 
-        const handleSubmit = () => {{
-          if (input.nama && input.nis) {{
-            setData([...data, input]);
-            setInput({{ nama: "", nis: "", kelas: "", jenis_kelamin: "" }});
-          }}
-        }};
+        const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId;
 
-        const tabs = [
-          {{ id: "siswa", label: "Data Siswa" }},
-          {{ id: "kehadiran", label: "Kehadiran" }},
-          {{ id: "kejadian", label: "Kejadian" }},
-          {{ id: "rekap", label: "Rekap" }},
-        ];
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        setLogLevel('debug'); // Keep for debugging, remove for production
 
-        return (
-          <div className="max-w-4xl mx-auto p-4">
-            <h1 className="text-2xl font-bold text-center mb-4">Sistem Informasi Siswa</h1>
-            <div className="flex space-x-2 mb-4 justify-center">
-              {{tabs.map((t) => (
-                <button
-                  key={{t.id}}
-                  className={`px-4 py-2 rounded ${
-                    tab === t.id ? "bg-blue-600 text-white" : "bg-white border"
-                  }`}
-                  onClick={{() => setTab(t.id)}}
-                >
-                  {{t.label}}
-                </button>
-              ))}}
-            </div>
-            {tab === "siswa" && (
-              <div className="bg-white p-4 rounded shadow">
-                <h2 className="text-lg font-semibold mb-4">Tambah Data Siswa</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                  <input
-                    type="text"
-                    name="nis"
-                    value={input.nis}
-                    onChange={handleChange}
-                    placeholder="NIS"
-                    className="p-2 border rounded w-full"
-                  />
-                  <input
-                    type="text"
-                    name="nama"
-                    value={input.nama}
-                    onChange={handleChange}
-                    placeholder="Nama"
-                    className="p-2 border rounded w-full"
-                  />
-                  <input
-                    type="text"
-                    name="kelas"
-                    value={input.kelas}
-                    onChange={handleChange}
-                    placeholder="Kelas"
-                    className="p-2 border rounded w-full"
-                  />
-                  <select
-                    name="jenis_kelamin"
-                    value={input.jenis_kelamin}
-                    onChange={handleChange}
-                    className="p-2 border rounded w-full"
-                  >
-                    <option value="">Pilih Jenis Kelamin</option>
-                    <option value="L">Laki-laki</option>
-                    <option value="P">Perempuan</option>
-                  </select>
+        // --- Helper Components ---
+        // Icon component to render Lucide icons
+        const Icon = ({ name, ...props }) => {
+            if (typeof window.lucide === 'undefined' || !window.lucide[name]) {
+                // Fallback for when icon is not found
+                return <span style={{ width: props.size || 24, height: props.size || 24, display: 'inline-block' }}></span>;
+            }
+            const LucideIcon = window.lucide[name];
+            return React.createElement(LucideIcon, props);
+        };
+        
+        // Generic Modal component
+        const Modal = ({ isOpen, onClose, title, children }) => {
+            if (!isOpen) return null;
+
+            return (
+                <div className="modal-backdrop" onClick={onClose}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold text-gray-800">{title}</h2>
+                            <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
+                                <Icon name="X" size={24} />
+                            </button>
+                        </div>
+                        {children}
+                    </div>
                 </div>
-                <button
-                  onClick={handleSubmit}
-                  className="bg-blue-600 text-white px-4 py-2 rounded"
-                >
-                  Simpan
-                </button>
+            );
+        };
 
-                <div className="mt-6">
-                  <h3 className="t
-            {tab === "kehadiran" && (
-              <div className="bg-white p-4 rounded shadow">
-                <h2 className="text-lg font-semibold mb-2">Kehadiran</h2>
-                <p className="text-sm text-gray-600">(fitur dalam pengembangan)</p>
-              </div>
-            )
+        // Confirmation Modal component
+        const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message }) => {
+            if (!isOpen) return null;
+
+            return (
+                <div className="modal-backdrop" onClick={onClose}>
+                    <div className="modal-content" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold text-gray-800">{title}</h2>
+                            <button onClick={onClose} className="text-gray-500 hover:text-gray-800">
+                                <Icon name="X" size={24} />
+                            </button>
+                        </div>
+                        <p className="mb-6">{message}</p>
+                        <div className="flex justify-end gap-2">
+                            <button onClick={onClose} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300">Batal</button>
+                            <button onClick={onConfirm} className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">Hapus</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Main App Components ---
+
+        // 1. Data Siswa Component
+        const DataSiswa = ({ db, userId }) => {
+            const [students, setStudents] = useState([]);
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+            const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
+            const [studentToDelete, setStudentToDelete] = useState(null);
+            const [currentStudent, setCurrentStudent] = useState(null);
+            const [searchTerm, setSearchTerm] = useState('');
+            const [importData, setImportData] = useState('');
+            const [isLoading, setIsLoading] = useState(true);
+            const [error, setError] = useState(null);
+
+            const studentsCollectionPath = `artifacts/${appId}/users/${userId}/students`;
+
+            // Effect to fetch students data
+            useEffect(() => {
+                if (!userId) return;
+                setIsLoading(true);
+                setError(null); // Clear previous errors
+                const q = query(collection(db, studentsCollectionPath));
+                const unsubscribe = onSnapshot(q, (querySnapshot) => {
+                    const studentsData = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setStudents(studentsData);
+                    setIsLoading(false);
+                }, (err) => {
+                    console.error("Error fetching students: ", err);
+                    setError("Gagal memuat data siswa. Silakan coba lagi.");
+                    setIsLoading(false);
+                });
+                return () => unsubscribe();
+            }, [db, userId]);
+
+            // Function to open student form modal
+            const handleOpenModal = (student = null) => {
+                setCurrentStudent(student);
+                setIsModalOpen(true);
+            };
+
+            // Function to close student form modal
+            const handleCloseModal = () => {
+                setIsModalOpen(false);
+                setCurrentStudent(null);
+            };
+
+            // Function to save student data (add or update)
+            const handleSaveStudent = async (studentData) => {
+                try {
+                    if (currentStudent) {
+                        // Update existing student
+                        const studentDocRef = doc(db, studentsCollectionPath, currentStudent.id);
+                        await updateDoc(studentDocRef, studentData);
+                    } else {
+                        // Add new student
+                        await addDoc(collection(db, studentsCollectionPath), studentData);
+                    }
+                    handleCloseModal();
+                } catch (err) {
+                    console.error("Error saving student: ", err);
+                    setError("Gagal menyimpan data siswa. Silakan coba lagi.");
+                }
+            };
+
+            // Function to initiate student deletion confirmation
+            const handleDeleteStudent = (id) => {
+                setStudentToDelete(id);
+                setIsConfirmDeleteOpen(true);
+            };
+
+            // Function to confirm and execute student deletion
+            const confirmDeleteStudent = async () => {
+                if (!studentToDelete) return;
+                try {
+                    await deleteDoc(doc(db, studentsCollectionPath, studentToDelete));
+                    setIsConfirmDeleteOpen(false);
+                    setStudentToDelete(null);
+                } catch (err) {
+                    console.error("Error deleting student: ", err);
+                    setError("Gagal menghapus data siswa. Silakan coba lagi.");
+                }
+            };
+            
+            // Function to handle importing student data from text area
+            const handleImportData = async () => {
+                if (!importData.trim()) {
+                    setError("Kolom impor tidak boleh kosong.");
+                    return;
+                }
+                const rows = importData.trim().split('\n');
+                const newStudents = rows.map(row => {
+                    const [nama, kelas, noHp, alamat] = row.split('\t'); // Assuming tab-separated values
+                    return { nama: nama || '', kelas: kelas || '', noHp: noHp || '', alamat: alamat || '' };
+                }).filter(s => s.nama && s.kelas); // Only import if nama and kelas are present
+
+                if (newStudents.length === 0) {
+                    setError("Format data tidak sesuai. Gunakan format: Nama[TAB]Kelas[TAB]No HP[TAB]Alamat");
+                    return;
+                }
+
+                try {
+                    const batch = writeBatch(db);
+                    newStudents.forEach(student => {
+                        const newDocRef = doc(collection(db, studentsCollectionPath));
+                        batch.set(newDocRef, student);
+                    });
+                    await batch.commit();
+                    console.log(`${newStudents.length} data siswa berhasil diimpor.`);
+                    setImportData('');
+                    setIsImportModalOpen(false);
+                    setError(null); // Clear any previous error on success
+                } catch (err) {
+                    console.error("Error importing students: ", err);
+                    setError("Gagal mengimpor data siswa. Silakan periksa format dan coba lagi.");
+                }
+            };
+
+            // Function to export student data to PDF
+            const exportToPDF = () => {
+                const doc = new window.jspdf.jsPDF();
+                doc.text("Data Siswa - MTs Yaspika Karangtawang", 14, 16);
+                doc.autoTable({
+                    head: [['ID', 'Nama', 'Kelas', 'No HP', 'Alamat']],
+                    body: filteredStudents.map(s => [s.id.substring(0, 5), s.nama, s.kelas, s.noHp, s.alamat]),
+                    startY: 20,
+                    styles: { fontSize: 8 },
+                    headStyles: { fillColor: '#e5e7eb', textColor: '#4b5563' },
+                    columnStyles: {
+                        0: { cellWidth: 20 },
+                        1: { cellWidth: 40 },
+                        2: { cellWidth: 20 },
+                        3: { cellWidth: 30 },
+                        4: { cellWidth: 'auto' }
+                    }
+                });
+                doc.save('data-siswa.pdf');
+            };
+
+            // Filter students based on search term (memoized for performance)
+            const filteredStudents = useMemo(() => {
+                return students.filter(student => 
+                    student.nama?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    student.kelas?.toLowerCase().includes(searchTerm.toLowerCase())
+                );
+            }, [students, searchTerm]);
+
+            return (
+                <div className="p-4 sm:p-6 bg-white rounded-lg shadow-md">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+                        <h2 className="text-xl font-bold text-gray-800">Data Siswa</h2>
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                            <button onClick={() => handleOpenModal()} className="flex items-center justify-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 transition-colors duration-200 text-sm">
+                                <Icon name="Plus" size={16}/>
+                                <span>Tambah Siswa</span>
+                            </button>
+                            <button onClick={() => setIsImportModalOpen(true)} className="flex items-center justify-center gap-2 bg-green-600 text-white px-3 py-1.5 rounded-md hover:bg-green-700 transition-colors duration-200 text-sm" title="Import dari Excel">
+                                <Icon name="Upload" size={16}/>
+                                <span>Import</span>
+                            </button>
+                            <button onClick={exportToPDF} disabled={filteredStudents.length === 0} className="flex items-center justify-center gap-2 bg-red-600 text-white px-3 py-1.5 rounded-md hover:bg-red-700 transition-colors duration-200 text-sm disabled:opacity-50 disabled:cursor-not-allowed" title="Export ke PDF">
+                                <Icon name="FileDown" size={16}/>
+                                <span>Export</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {error && (
+                        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+                            <strong className="font-bold">Error!</strong>
+                            <span className="block sm:inline"> {error}</span>
+                        </div>
+                    )}
+                    
+                    <div className="mb-4">
+                        <div className="relative w-full sm:w-1/2 lg:w-1/3">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <Icon name="Search" className="text-gray-400" size={20} />
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="Cari nama atau kelas..."
+                                className="w-full p-2 pl-10 border rounded-md bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    
+                    {isLoading ? (
+                        <p className="text-center text-gray-600">Memuat data siswa...</p>
+                    ) : (
+                        <div className="overflow-x-auto rounded-lg border border-gray-200">
+                            <table className="min-w-full text-left border-collapse text-sm">
+                                <thead className="bg-gray-100">
+                                    <tr>
+                                        <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Nama</th>
+                                        <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Kelas</th>
+                                        <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">No HP</th>
+                                        <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Alamat</th>
+                                        <th className="p-3 font-semibold text-gray-600 text-right whitespace-nowrap">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredStudents.length > 0 ? (
+                                        filteredStudents.map(student => (
+                                            <tr key={student.id} className="border-b border-gray-100 hover:bg-gray-50">
+                                                <td className="p-3">{student.nama}</td>
+                                                <td className="p-3">{student.kelas}</td>
+                                                <td className="p-3">{student.noHp}</td>
+                                                <td className="p-3">{student.alamat}</td>
+                                                <td className="p-3 flex gap-2 justify-end">
+                                                    <button onClick={() => handleOpenModal(student)} className="text-yellow-500 hover:text-yellow-700 p-1 rounded-full hover:bg-yellow-100 transition-colors" title="Edit Siswa"><Icon name="Edit" size={18}/></button>
+                                                    <button onClick={() => handleDeleteStudent(student.id)} className="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100 transition-colors" title="Hapus Siswa"><Icon name="Trash2" size={18}/></button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan="5" className="p-4 text-center text-gray-500">Tidak ada data siswa ditemukan.</td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={currentStudent ? "Edit Data Siswa" : "Tambah Data Siswa"}>
+                        <StudentForm student={currentStudent} onSave={handleSaveStudent} onClose={handleCloseModal} />
+                    </Modal>
+
+                    <Modal isOpen={isImportModalOpen} onClose={() => { setIsImportModalOpen(false); setImportData(''); setError(null); }} title="Import Data Siswa">
+                        <div>
+                            <p className="mb-2 text-sm text-gray-600">Salin kolom dari Excel (Nama, Kelas, No HP, Alamat) tanpa header, lalu tempel di bawah ini.</p>
+                            <p className="mb-4 text-xs text-gray-500">Pastikan urutan kolom benar dan dipisahkan oleh Tab (default saat copy dari Excel).</p>
+                            <textarea
+                                className="w-full h-40 p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="Contoh:&#10;Budi Santoso\t7A\t081234567890\tJl. Merdeka No. 1&#10;Siti Aminah\t7A\t081234567891\tJl. Pahlawan No. 2"
+                                value={importData}
+                                onChange={(e) => { setImportData(e.target.value); setError(null); }}
+                            ></textarea>
+                            {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+                            <div className="flex justify-end gap-2 mt-4">
+                                <button type="button" onClick={() => { setIsImportModalOpen(false); setImportData(''); setError(null); }} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300">Batal</button>
+                                <button type="button" onClick={handleImportData} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Import</button>
+                            </div>
+                        </div>
+                    </Modal>
+
+                    <ConfirmationModal
+                        isOpen={isConfirmDeleteOpen}
+                        onClose={() => setIsConfirmDeleteOpen(false)}
+                        onConfirm={confirmDeleteStudent}
+                        title="Konfirmasi Hapus Siswa"
+                        message="Apakah Anda yakin ingin menghapus data siswa ini? Tindakan ini tidak dapat dibatalkan."
+                    />
+                </div>
+            );
+        };
+
+        // Student Form component (used in DataSiswa modal)
+        const StudentForm = ({ student, onSave, onClose }) => {
+            const [formData, setFormData] = useState({
+                nama: '',
+                kelas: '',
+                noHp: '',
+                alamat: ''
+            });
+
+            // Populate form when student prop changes (for editing)
+            useEffect(() => {
+                if (student) {
+                    setFormData(student);
+                } else {
+                    setFormData({ nama: '', kelas: '', noHp: '', alamat: '' });
+                }
+            }, [student]);
+
+            // Handle input changes
+            const handleChange = (e) => {
+                const { name, value } = e.target;
+                setFormData(prev => ({ ...prev, [name]: value }));
+            };
+
+            // Handle form submission
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                onSave(formData);
+            };
+
+            const kelasOptions = ['7A', '7B', '7C', '8A', '8B', '8C', '9A', '9B', '9C'];
+
+            return (
+                <form onSubmit={handleSubmit}>
+                    <div className="space-y-4">
+                        <input type="text" name="nama" value={formData.nama} onChange={handleChange} placeholder="Nama Lengkap" className="w-full p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500" required />
+                        <select name="kelas" value={formData.kelas} onChange={handleChange} className="w-full p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500" required>
+                            <option value="">Pilih Kelas</option>
+                            {kelasOptions.map(k => <option key={k} value={k}>{k}</option>)}
+                        </select>
+                        <input type="tel" name="noHp" value={formData.noHp} onChange={handleChange} placeholder="No HP" className="w-full p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500" />
+                        <textarea name="alamat" value={formData.alamat} onChange={handleChange} placeholder="Alamat" className="w-full p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500"></textarea>
+                    </div>
+                    <div className="flex justify-end gap-2 mt-6">
+                        <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300">Batal</button>
+                        <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Simpan</button>
+                    </div>
+                </form>
+            );
+        };
+
+        // 2. Kehadiran Component
+        const Kehadiran = ({ db, userId }) => {
+            const [absences, setAbsences] = useState([]);
+            const [students, setStudents] = useState([]);
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
+            const [absenceToDelete, setAbsenceToDelete] = useState(null);
+            const [isLoading, setIsLoading] = useState(true);
+            const [currentAbsence, setCurrentAbsence] = useState(null);
+            const [error, setError] = useState(null);
+
+            const studentsCollectionPath = `artifacts/${appId}/users/${userId}/students`;
+            const absencesCollectionPath = `artifacts/${appId}/users/${userId}/absences`;
+
+            // Effect to fetch students for dropdown
+            useEffect(() => {
+                if (!userId) return;
+                const q = query(collection(db, studentsCollectionPath));
+                const unsubscribe = onSnapshot(q, (querySnapshot) => {
+                    setStudents(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                }, (err) => {
+                    console.error("Error fetching students for absence form: ", err);
+                    setError("Gagal memuat daftar siswa.");
+                });
+                return () => unsubscribe();
+            }, [db, userId]);
+
+            // Effect to fetch absences data
+            useEffect(() => {
+                if (!userId) return;
+                setIsLoading(true);
+                setError(null);
+                const q = query(collection(db, absencesCollectionPath));
+                const unsubscribe = onSnapshot(q, (querySnapshot) => {
+                    setAbsences(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                    setIsLoading(false);
+                }, (err) => {
+                    console.error("Error fetching absences: ", err);
+                    setError("Gagal memuat data ketidakhadiran. Silakan coba lagi.");
+                    setIsLoading(false);
+                });
+                return () => unsubscribe();
+            }, [db, userId]);
+
+            // Function to open absence form modal
+            const handleOpenModal = (absence = null) => {
+                setCurrentAbsence(absence);
+                setIsModalOpen(true);
+            };
+
+            // Function to save absence data (add or update)
+            const handleSaveAbsence = async (absenceData) => {
+                try {
+                    const student = students.find(s => s.id === absenceData.studentId);
+                    if (!student) {
+                        setError("Siswa tidak ditemukan. Silakan pilih siswa yang valid.");
+                        return;
+                    }
+
+                    const dataToSave = {
+                        ...absenceData,
+                        studentName: student.nama,
+                        kelas: student.kelas
+                    };
+
+                    if (currentAbsence) {
+                        await updateDoc(doc(db, absencesCollectionPath, currentAbsence.id), dataToSave);
+                    } else {
+                        await addDoc(collection(db, absencesCollectionPath), dataToSave);
+                    }
+                    setIsModalOpen(false);
+                    setCurrentAbsence(null);
+                    setError(null);
+                } catch (err) {
+                    console.error("Error saving absence: ", err);
+                    setError("Gagal menyimpan data ketidakhadiran. Silakan coba lagi.");
+                }
+            };
+            
+            // Function to initiate absence deletion confirmation
+            const handleDeleteAbsence = (id) => {
+                setAbsenceToDelete(id);
+                setIsConfirmDeleteOpen(true);
+            };
+
+            // Function to confirm and execute absence deletion
+            const confirmDeleteAbsence = async () => {
+                if (!absenceToDelete) return;
+                try {
+                    await deleteDoc(doc(db, absencesCollectionPath, absenceToDelete));
+                    setIsConfirmDeleteOpen(false);
+                    setAbsenceToDelete(null);
+                } catch (err) {
+                    console.error("Error deleting absence: ", err);
+                    setError("Gagal menghapus data ketidakhadiran. Silakan coba lagi.");
+                }
+            };
+
+            // Function to export absences data to PDF
+            const exportToPDF = () => {
+                const doc = new window.jspdf.jsPDF();
+                doc.text("Data Ketidakhadiran Siswa - MTs Yaspika Karangtawang", 14, 16);
+                doc.autoTable({
+                    head: [['Tanggal', 'Nama', 'Kelas', 'Keterangan']],
+                    body: absences.map(a => [a.tanggal, a.studentName, a.kelas, a.keterangan]),
+                    startY: 20,
+                    styles: { fontSize: 8 },
+                    headStyles: { fillColor: '#e5e7eb', textColor: '#4b5563' }
+                });
+                doc.save('data-ketidakhadiran.pdf');
+            };
+
+            return (
+                <div className="p-4 sm:p-6 bg-white rounded-lg shadow-md">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                        <h2 className="text-xl font-bold text-gray-800">Kehadiran</h2>
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                            <button onClick={() => handleOpenModal()} className="flex items-center justify-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 transition-colors duration-200 text-sm">
+                                <Icon name="Plus" size={16}/>
+                                <span className="hidden sm:inline">Catat Ketidakhadiran</span>
+                                <span className="sm:hidden">Catat</span>
+                            </button>
+                            <button onClick={exportToPDF} disabled={absences.length === 0} className="flex items-center justify-center gap-2 bg-red-600 text-white px-3 py-1.5 rounded-md hover:bg-red-700 transition-colors duration-200 text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                                <Icon name="FileDown" size={16}/>
+                                <span className="hidden sm:inline">Export ke PDF</span>
+                                <span className="sm:hidden">Export</span>
+                            </button>
+                        </div>
+                    </div>
+                    {error && (
+                        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+                            <strong className="font-bold">Error!</strong>
+                            <span className="block sm:inline"> {error}</span>
+                        </div>
+                    )}
+                    {isLoading ? (
+                        <p className="text-center text-gray-600">Memuat data ketidakhadiran...</p>
+                    ) : (
+                        <div className="overflow-x-auto rounded-lg border border-gray-200">
+                            <table className="min-w-full text-left border-collapse text-sm">
+                                <thead className="bg-gray-100">
+                                    <tr>
+                                        <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Tanggal</th>
+                                        <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Nama</th>
+                                        <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Kelas</th>
+                                        <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Keterangan</th>
+                                        <th className="p-3 font-semibold text-gray-600 text-right whitespace-nowrap">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {absences.length > 0 ? (
+                                        absences.map(absence => (
+                                            <tr key={absence.id} className="border-b border-gray-100 hover:bg-gray-50">
+                                                <td className="p-3">{absence.tanggal}</td>
+                                                <td className="p-3">{absence.studentName}</td>
+                                                <td className="p-3">{absence.kelas}</td>
+                                                <td className="p-3">{absence.keterangan}</td>
+                                                <td className="p-3 flex gap-2 justify-end">
+                                                    <button onClick={() => handleOpenModal(absence)} className="text-yellow-500 hover:text-yellow-700 p-1 rounded-full hover:bg-yellow-100 transition-colors" title="Edit Ketidakhadiran"><Icon name="Edit" size={18}/></button>
+                                                    <button onClick={() => handleDeleteAbsence(absence.id)} className="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100 transition-colors" title="Hapus Ketidakhadiran"><Icon name="Trash2" size={18}/></button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan="5" className="p-4 text-center text-gray-500">Tidak ada data ketidakhadiran.</td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                    <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setCurrentAbsence(null); setError(null); }} title={currentAbsence ? "Edit Ketidakhadiran" : "Catat Ketidakhadiran"}>
+                        <AbsenceForm students={students} onSave={handleSaveAbsence} onClose={() => { setIsModalOpen(false); setCurrentAbsence(null); setError(null); }} currentAbsence={currentAbsence} />
+                    </Modal>
+                    <ConfirmationModal
+                        isOpen={isConfirmDeleteOpen}
+                        onClose={() => setIsConfirmDeleteOpen(false)}
+                        onConfirm={confirmDeleteAbsence}
+                        title="Konfirmasi Hapus Ketidakhadiran"
+                        message="Apakah Anda yakin ingin menghapus data ketidakhadiran ini? Tindakan ini tidak dapat dibatalkan."
+                    />
+                </div>
+            );
+        };
+        
+        // Absence Form component (used in Kehadiran modal)
+        const AbsenceForm = ({ students, onSave, onClose, currentAbsence }) => {
+            const [formData, setFormData] = useState({
+                tanggal: new Date().toISOString().split('T')[0], // Default to current date
+                studentId: '',
+                keterangan: 'Sakit'
+            });
+
+            // Populate form when currentAbsence prop changes (for editing)
+            useEffect(() => {
+                if (currentAbsence) {
+                    setFormData({
+                        tanggal: currentAbsence.tanggal,
+                        studentId: currentAbsence.studentId,
+                        keterangan: currentAbsence.keterangan,
+                    });
+                } else {
+                    setFormData({
+                        tanggal: new Date().toISOString().split('T')[0],
+                        studentId: '',
+                        keterangan: 'Sakit'
+                    });
+                }
+            }, [currentAbsence]);
+
+            // Handle input changes
+            const handleChange = (e) => {
+                const { name, value } = e.target;
+                setFormData(prev => ({ ...prev, [name]: value }));
+            };
+
+            // Handle form submission
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (!formData.studentId) {
+                    // In a real app, display a user-friendly error message here
+                    console.error("Silakan pilih siswa.");
+                    return;
+                }
+                onSave(formData);
+            };
+
+            const keteranganOptions = ['Sakit', 'Izin', 'Alpa', 'Kesiangan', 'Bolos'];
+
+            return (
+                <form onSubmit={handleSubmit}>
+                    <div className="space-y-4">
+                        <label htmlFor="tanggal" className="block text-sm font-medium text-gray-700">Tanggal</label>
+                        <input type="date" id="tanggal" name="tanggal" value={formData.tanggal} onChange={handleChange} className="w-full p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500" required />
+                        
+                        <label htmlFor="studentId" className="block text-sm font-medium text-gray-700">Siswa</label>
+                        <select id="studentId" name="studentId" value={formData.studentId} onChange={handleChange} className="w-full p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500" required>
+                            <option value="">Pilih Siswa</option>
+                            {students.map(s => <option key={s.id} value={s.id}>{s.nama} ({s.kelas})</option>)}
+                        </select>
+                        
+                        <label htmlFor="keterangan" className="block text-sm font-medium text-gray-700">Keterangan</label>
+                        <select id="keterangan" name="keterangan" value={formData.keterangan} onChange={handleChange} className="w-full p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500" required>
+                            {keteranganOptions.map(k => <option key={k} value={k}>{k}</option>)}
+                        </select>
+                    </div>
+                    <div className="flex justify-end gap-2 mt-6">
+                        <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300">Batal</button>
+                        <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Simpan</button>
+                    </div>
+                </form>
+            );
+        };
+        
+        // 3. Kejadian Component
+        const Kejadian = ({ db, userId }) => {
+            const [incidents, setIncidents] = useState([]);
+            const [students, setStudents] = useState([]);
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false);
+            const [incidentToDelete, setIncidentToDelete] = useState(null);
+            const [isLoading, setIsLoading] = useState(true);
+            const [currentIncident, setCurrentIncident] = useState(null);
+            const [error, setError] = useState(null);
+
+            const studentsCollectionPath = `artifacts/${appId}/users/${userId}/students`;
+            const incidentsCollectionPath = `artifacts/${appId}/users/${userId}/incidents`;
+
+            // Effect to fetch students for dropdown
+            useEffect(() => {
+                if (!userId) return;
+                const q = query(collection(db, studentsCollectionPath));
+                const unsubscribe = onSnapshot(q, (querySnapshot) => {
+                    setStudents(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                }, (err) => {
+                    console.error("Error fetching students for incident form: ", err);
+                    setError("Gagal memuat daftar siswa.");
+                });
+                return () => unsubscribe();
+            }, [db, userId]);
+            
+            // Effect to fetch incidents data
+            useEffect(() => {
+                if (!userId) return;
+                setIsLoading(true);
+                setError(null);
+                const q = query(collection(db, incidentsCollectionPath));
+                const unsubscribe = onSnapshot(q, (querySnapshot) => {
+                    setIncidents(querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                    setIsLoading(false);
+                }, (err) => {
+                    console.error("Error fetching incidents: ", err);
+                    setError("Gagal memuat data kejadian. Silakan coba lagi.");
+                    setIsLoading(false);
+                });
+                return () => unsubscribe();
+            }, [db, userId]);
+
+            // Function to open incident form modal
+            const handleOpenModal = (incident = null) => {
+                setCurrentIncident(incident);
+                setIsModalOpen(true);
+            };
+
+            // Function to save incident data (add or update)
+            const handleSaveIncident = async (incidentData) => {
+                try {
+                    const student = students.find(s => s.id === incidentData.studentId);
+                    if (!student) {
+                        setError("Siswa tidak ditemukan. Silakan pilih siswa yang valid.");
+                        return;
+                    }
+                    
+                    const dataToSave = {
+                        ...incidentData,
+                        studentName: student.nama,
+                        kelas: student.kelas,
+                        tanggal: incidentData.tanggal || new Date().toISOString().split('T')[0] // Ensure tanggal is set
+                    };
+
+                    if (currentIncident) {
+                        await updateDoc(doc(db, incidentsCollectionPath, currentIncident.id), dataToSave);
+                    } else {
+                        await addDoc(collection(db, incidentsCollectionPath), dataToSave);
+                    }
+                    setIsModalOpen(false);
+                    setCurrentIncident(null);
+                    setError(null);
+                } catch (err) {
+                    console.error("Error saving incident: ", err);
+                    setError("Gagal menyimpan data kejadian. Silakan coba lagi.");
+                }
+            };
+
+            // Function to initiate incident deletion confirmation
+            const handleDeleteIncident = (id) => {
+                setIncidentToDelete(id);
+                setIsConfirmDeleteOpen(true);
+            };
+
+            // Function to confirm and execute incident deletion
+            const confirmDeleteIncident = async () => {
+                if (!incidentToDelete) return;
+                try {
+                    await deleteDoc(doc(db, incidentsCollectionPath, incidentToDelete));
+                    setIsConfirmDeleteOpen(false);
+                    setIncidentToDelete(null);
+                } catch (err) {
+                    console.error("Error deleting incident: ", err);
+                    setError("Gagal menghapus data kejadian. Silakan coba lagi.");
+                }
+            };
+            
+            // Function to export incidents data to PDF
+            const exportToPDF = () => {
+                const doc = new window.jspdf.jsPDF();
+                doc.text("Data Kejadian Siswa - MTs Yaspika Karangtawang", 14, 16);
+                doc.autoTable({
+                    head: [['Tanggal', 'Nama', 'Kelas', 'Jenis Kejadian']],
+                    body: incidents.map(i => [i.tanggal, i.studentName, i.kelas, i.jenisKejadian === 'Lainnya' ? `Lainnya: ${i.keteranganLainnya || ''}` : i.jenisKejadian]),
+                    startY: 20,
+                    styles: { fontSize: 8 },
+                    headStyles: { fillColor: '#e5e7eb', textColor: '#4b5563' }
+                });
+                doc.save('data-kejadian.pdf');
+            };
+
+            return (
+                <div className="p-4 sm:p-6 bg-white rounded-lg shadow-md">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                        <h2 className="text-xl font-bold text-gray-800">Kejadian</h2>
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                            <button onClick={() => handleOpenModal()} className="flex items-center justify-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 transition-colors duration-200 text-sm">
+                                <Icon name="Plus" size={16}/> Catat Kejadian
+                            </button>
+                            <button onClick={exportToPDF} disabled={incidents.length === 0} className="flex items-center justify-center gap-2 bg-red-600 text-white px-3 py-1.5 rounded-md hover:bg-red-700 transition-colors duration-200 text-sm disabled:opacity-50 disabled:cursor-not-allowed">
+                                <Icon name="FileDown" size={16}/> Export ke PDF
+                            </button>
+                        </div>
+                    </div>
+                    {error && (
+                        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+                            <strong className="font-bold">Error!</strong>
+                            <span className="block sm:inline"> {error}</span>
+                        </div>
+                    )}
+                    {isLoading ? (
+                        <p className="text-center text-gray-600">Memuat data kejadian...</p>
+                    ) : (
+                        <div className="overflow-x-auto rounded-lg border border-gray-200">
+                            <table className="min-w-full text-left border-collapse text-sm">
+                                <thead className="bg-gray-100">
+                                    <tr>
+                                        <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Tanggal</th>
+                                        <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Nama</th>
+                                        <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Kelas</th>
+                                        <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Jenis Kejadian</th>
+                                        <th className="p-3 font-semibold text-gray-600 text-right whitespace-nowrap">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {incidents.length > 0 ? (
+                                        incidents.map(incident => (
+                                            <tr key={incident.id} className="border-b border-gray-100 hover:bg-gray-50">
+                                                <td className="p-3">{incident.tanggal}</td>
+                                                <td className="p-3">{incident.studentName}</td>
+                                                <td className="p-3">{incident.kelas}</td>
+                                                <td className="p-3">{incident.jenisKejadian === 'Lainnya' ? `Lainnya: ${incident.keteranganLainnya || ''}` : incident.jenisKejadian}</td>
+                                                <td className="p-3 flex gap-2 justify-end">
+                                                    <button onClick={() => handleOpenModal(incident)} className="text-yellow-500 hover:text-yellow-700 p-1 rounded-full hover:bg-yellow-100 transition-colors" title="Edit Kejadian"><Icon name="Edit" size={18}/></button>
+                                                    <button onClick={() => handleDeleteIncident(incident.id)} className="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100 transition-colors" title="Hapus Kejadian"><Icon name="Trash2" size={18}/></button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan="5" className="p-4 text-center text-gray-500">Tidak ada data kejadian.</td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                    <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setCurrentIncident(null); setError(null); }} title={currentIncident ? "Edit Kejadian" : "Catat Kejadian"}>
+                        <IncidentForm students={students} onSave={handleSaveIncident} onClose={() => { setIsModalOpen(false); setCurrentIncident(null); setError(null); }} currentIncident={currentIncident} />
+                    </Modal>
+                    <ConfirmationModal
+                        isOpen={isConfirmDeleteOpen}
+                        onClose={() => setIsConfirmDeleteOpen(false)}
+                        onConfirm={confirmDeleteIncident}
+                        title="Konfirmasi Hapus Kejadian"
+                        message="Apakah Anda yakin ingin menghapus data kejadian ini? Tindakan ini tidak dapat dibatalkan."
+                    />
+                </div>
+            );
+        };
+
+        // Incident Form component (used in Kejadian modal)
+        const IncidentForm = ({ students, onSave, onClose, currentIncident }) => {
+            const [formData, setFormData] = useState({
+                tanggal: new Date().toISOString().split('T')[0], // Default to current date
+                studentId: '',
+                jenisKejadian: 'Berkelahi',
+                keteranganLainnya: ''
+            });
+
+            // Populate form when currentIncident prop changes (for editing)
+            useEffect(() => {
+                if (currentIncident) {
+                    setFormData({
+                        tanggal: currentIncident.tanggal || new Date().toISOString().split('T')[0],
+                        studentId: currentIncident.studentId,
+                        jenisKejadian: currentIncident.jenisKejadian,
+                        keteranganLainnya: currentIncident.keteranganLainnya || ''
+                    });
+                } else {
+                    setFormData({
+                        tanggal: new Date().toISOString().split('T')[0],
+                        studentId: '',
+                        jenisKejadian: 'Berkelahi',
+                        keteranganLainnya: ''
+                    });
+                }
+            }, [currentIncident]);
+
+            // Handle input changes
+            const handleChange = (e) => {
+                const { name, value } = e.target;
+                setFormData(prev => ({ ...prev, [name]: value }));
+            };
+
+            // Handle form submission
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (!formData.studentId) {
+                    // In a real app, display a user-friendly error message here
+                    console.error("Silakan pilih siswa.");
+                    return;
+                }
+                onSave(formData);
+            };
+
+            const jenisKejadianOptions = ['Berkelahi', 'Merokok', 'Pacaran', 'Bullying', 'Tidak Sholat', 'Tidak Ikut Upacara', 'Pakaian', 'Melawan Guru', 'Lainnya'];
+
+            return (
+                <form onSubmit={handleSubmit}>
+                    <div className="space-y-4">
+                        <label htmlFor="incidentTanggal" className="block text-sm font-medium text-gray-700">Tanggal</label>
+                        <input type="date" id="incidentTanggal" name="tanggal" value={formData.tanggal} onChange={handleChange} className="w-full p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500" required />
+                        
+                        <label htmlFor="incidentStudentId" className="block text-sm font-medium text-gray-700">Siswa</label>
+                        <select id="incidentStudentId" name="studentId" value={formData.studentId} onChange={handleChange} className="w-full p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500" required>
+                            <option value="">Pilih Siswa</option>
+                            {students.map(s => <option key={s.id} value={s.id}>{s.nama} ({s.kelas})</option>)}
+                        </select>
+                        
+                        <label htmlFor="jenisKejadian" className="block text-sm font-medium text-gray-700">Jenis Kejadian</label>
+                        <select id="jenisKejadian" name="jenisKejadian" value={formData.jenisKejadian} onChange={handleChange} className="w-full p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500" required>
+                            {jenisKejadianOptions.map(k => <option key={k} value={k}>{k}</option>)}
+                        </select>
+                        {formData.jenisKejadian === 'Lainnya' && (
+                            <div>
+                                <label htmlFor="keteranganLainnya" className="block text-sm font-medium text-gray-700 mt-2">Keterangan Lainnya</label>
+                                <textarea id="keteranganLainnya" name="keteranganLainnya" value={formData.keteranganLainnya} onChange={handleChange} placeholder="Detail kejadian lainnya" className="w-full p-2 border rounded-md focus:ring-blue-500 focus:border-blue-500"></textarea>
+                            </div>
+                        )}
+                    </div>
+                    <div className="flex justify-end gap-2 mt-6">
+                        <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300">Batal</button>
+                        <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Simpan</button>
+                    </div>
+                </form>
+            );
+        };
+
+        // 4. Rekap Component (Main container for RekapKehadiran and RekapKejadian)
+        const Rekap = ({ db, userId }) => {
+            const [activeTab, setActiveTab] = useState('kehadiran');
+            const [students, setStudents] = useState([]);
+            const [absences, setAbsences] = useState([]);
+            const [incidents, setIncidents] = useState([]);
+            const [kelasOptions, setKelasOptions] = useState([]);
+            const [isLoading, setIsLoading] = useState(true);
+            const [error, setError] = useState(null);
+            
+            const studentsCollectionPath = `artifacts/${appId}/users/${userId}/students`;
+            const absencesCollectionPath = `artifacts/${appId}/users/${userId}/absences`;
+            const incidentsCollectionPath = `artifacts/${appId}/users/${userId}/incidents`;
+
+            // Fetch all necessary data for rekap
+            useEffect(() => {
+                if (!userId) return;
+                setIsLoading(true);
+                setError(null);
+
+                const unsubStudents = onSnapshot(query(collection(db, studentsCollectionPath)), (snap) => {
+                    const studentData = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setStudents(studentData);
+                    const uniqueKelas = [...new Set(studentData.map(s => s.kelas))].sort();
+                    setKelasOptions(uniqueKelas);
+                    setIsLoading(false); // Set loading to false after students are loaded
+                }, (err) => {
+                    console.error("Error fetching students for rekap: ", err);
+                    setError("Gagal memuat data siswa untuk rekap.");
+                    setIsLoading(false);
+                });
+
+                const unsubAbsences = onSnapshot(query(collection(db, absencesCollectionPath)), (snap) => {
+                    setAbsences(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                }, (err) => {
+                    console.error("Error fetching absences for rekap: ", err);
+                    setError("Gagal memuat data ketidakhadiran untuk rekap.");
+                });
+
+                const unsubIncidents = onSnapshot(query(collection(db, incidentsCollectionPath)), (snap) => {
+                    setIncidents(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                }, (err) => {
+                    console.error("Error fetching incidents for rekap: ", err);
+                    setError("Gagal memuat data kejadian untuk rekap.");
+                });
+
+                return () => {
+                    unsubStudents();
+                    unsubAbsences();
+                    unsubIncidents();
+                };
+            }, [db, userId]);
+
+            return (
+                <div className="p-4 sm:p-6 bg-white rounded-lg shadow-md">
+                    <h2 className="text-xl font-bold mb-4 text-gray-800">Rekapitulasi</h2>
+                    <div className="border-b border-gray-200 mb-6">
+                        <nav className="-mb-px flex space-x-4 sm:space-x-8" aria-label="Tabs">
+                            <button onClick={() => setActiveTab('kehadiran')} className={`${activeTab === 'kehadiran' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm sm:text-base`}>
+                                Rekap Kehadiran
+                            </button>
+                            <button onClick={() => setActiveTab('kejadian')} className={`${activeTab === 'kejadian' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm sm:text-base`}>
+                                Rekap Kejadian
+                            </button>
+                        </nav>
+                    </div>
+                    {error && (
+                        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+                            <strong className="font-bold">Error!</strong>
+                            <span className="block sm:inline"> {error}</span>
+                        </div>
+                    )}
+                    {isLoading ? (
+                        <p className="text-center text-gray-600">Memuat data rekapitulasi...</p>
+                    ) : (
+                        <div className="mt-6">
+                            {activeTab === 'kehadiran' && <RekapKehadiran students={students} absences={absences} kelasOptions={kelasOptions} />}
+                            {activeTab === 'kejadian' && <RekapKejadian students={students} incidents={incidents} kelasOptions={kelasOptions} />}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+        
+        // Rekap Kehadiran sub-component
+        const RekapKehadiran = ({ students, absences, kelasOptions }) => {
+            const [filters, setFilters] = useState({ kelas: '', startDate: '', endDate: '' });
+            const [rekapData, setRekapData] = useState([]);
+            const [error, setError] = useState(null);
+
+            const handleFilterChange = (e) => {
+                setFilters(prev => ({ ...prev, [e.target.name]: e.target.value }));
+            };
+
+            // Determine attendance status based on total "negative" counts
+            const getStatusKehadiran = (total) => {
+                if (total === 0) return { text: 'Sangat Baik', color: 'bg-green-100 text-green-800' };
+                if (total >= 1 && total <= 3) return { text: 'Baik', color: 'bg-blue-100 text-blue-800' };
+                if (total >= 4 && total <= 6) return { text: 'Sedang', color: 'bg-gray-200 text-gray-800' };
+                if (total > 6 && total <= 15) return { text: 'Kurang', color: 'bg-yellow-100 text-yellow-800' };
+                return { text: 'Buruk', color: 'bg-red-100 text-red-800' };
+            };
+
+            // Generate rekap data based on filters (memoized for performance)
+            const generateRekap = useCallback(() => {
+                setError(null);
+                let filteredStudents = students;
+                if (filters.kelas) {
+                    filteredStudents = students.filter(s => s.kelas === filters.kelas);
+                }
+
+                let filteredAbsences = absences;
+                if (filters.startDate && filters.endDate) {
+                    if (filters.startDate > filters.endDate) {
+                        setError("Tanggal mulai tidak boleh lebih besar dari tanggal akhir.");
+                        setRekapData([]);
+                        return;
+                    }
+                    filteredAbsences = absences.filter(a => a.tanggal >= filters.startDate && a.tanggal <= filters.endDate);
+                }
+
+                const data = filteredStudents.map(student => {
+                    const studentAbsences = filteredAbsences.filter(a => a.studentId === student.id);
+                    const counts = { Sakit: 0, Izin: 0, Alpa: 0, Kesiangan: 0, Bolos: 0 };
+                    studentAbsences.forEach(a => {
+                        if (counts.hasOwnProperty(a.keterangan)) {
+                            counts[a.keterangan]++;
+                        }
+                    });
+                    
+                    // Calculate total "negative" points based on specific rules
+                    const total = (counts.Sakit > 10 ? counts.Sakit - 10 : 0) + 
+                                  (counts.Izin > 3 ? counts.Izin - 3 : 0) + 
+                                  counts.Alpa + counts.Kesiangan + counts.Bolos;
+
+                    const status = getStatusKehadiran(total);
+
+                    return {
+                        id: student.id,
+                        nama: student.nama,
+                        ...counts,
+                        status
+                    };
+                });
+                setRekapData(data);
+            }, [students, absences, filters]);
+            
+            // Effect to regenerate rekap when filters or source data changes
+            useEffect(() => {
+                generateRekap();
+            }, [generateRekap]);
+
+            // Export rekap data to PDF
+            const exportToPDF = () => {
+                const doc = new window.jspdf.jsPDF('landscape'); // Use landscape for wider table
+                doc.text(`Rekap Kehadiran - Kelas: ${filters.kelas || 'Semua'}`, 14, 16);
+                if (filters.startDate && filters.endDate) {
+                    doc.text(`Periode: ${filters.startDate} s/d ${filters.endDate}`, 14, 24);
+                }
+                doc.autoTable({
+                    head: [['No', 'Nama', 'Sakit', 'Izin', 'Alpa', 'Kesiangan', 'Bolos', 'Status']],
+                    body: rekapData.map((d, i) => [i + 1, d.nama, d.Sakit, d.Izin, d.Alpa, d.Kesiangan, d.Bolos, d.status.text]),
+                    startY: 30,
+                    styles: { fontSize: 8 },
+                    headStyles: { fillColor: '#e5e7eb', textColor: '#4b5563' }
+                });
+                doc.save('rekap-kehadiran.pdf');
+            };
+
+            return (
+                <div>
+                    <div className="flex flex-wrap gap-4 items-end mb-4 p-4 bg-gray-50 rounded-lg">
+                        <div className="flex-1 min-w-[150px]">
+                            <label htmlFor="rekapKelasKehadiran" className="block text-sm font-medium text-gray-700">Kelas</label>
+                            <select id="rekapKelasKehadiran" name="kelas" value={filters.kelas} onChange={handleFilterChange} className="w-full p-2 border rounded-md mt-1 focus:ring-blue-500 focus:border-blue-500">
+                                <option value="">Semua Kelas</option>
+                                {kelasOptions.map(k => <option key={k} value={k}>{k}</option>)}
+                            </select>
+                        </div>
+                        <div className="flex-1 min-w-[150px]">
+                            <label htmlFor="rekapStartDateKehadiran" className="block text-sm font-medium text-gray-700">Tanggal Mulai</label>
+                            <input type="date" id="rekapStartDateKehadiran" name="startDate" value={filters.startDate} onChange={handleFilterChange} className="w-full p-2 border rounded-md mt-1 focus:ring-blue-500 focus:border-blue-500" />
+                        </div>
+                        <div className="flex-1 min-w-[150px]">
+                            <label htmlFor="rekapEndDateKehadiran" className="block text-sm font-medium text-gray-700">Tanggal Akhir</label>
+                            <input type="date" id="rekapEndDateKehadiran" name="endDate" value={filters.endDate} onChange={handleFilterChange} className="w-full p-2 border rounded-md mt-1 focus:ring-blue-500 focus:border-blue-500" />
+                        </div>
+                        <button onClick={generateRekap} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors duration-200">Lihat Data</button>
+                        <button onClick={exportToPDF} disabled={rekapData.length === 0} className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed">Export PDF</button>
+                    </div>
+
+                    {error && (
+                        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+                            <strong className="font-bold">Error!</strong>
+                            <span className="block sm:inline"> {error}</span>
+                        </div>
+                    )}
+
+                    <div className="overflow-x-auto rounded-lg border border-gray-200">
+                        <table className="min-w-full text-left border-collapse text-sm">
+                            <thead className="bg-gray-100">
+                                <tr>
+                                    <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">No</th>
+                                    <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Nama</th>
+                                    <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Sakit</th>
+                                    <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Izin</th>
+                                    <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Alpa</th>
+                                    <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Kesiangan</th>
+                                    <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Bolos</th>
+                                    <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {rekapData.length > 0 ? (
+                                    rekapData.map((d, i) => (
+                                        <tr key={d.id} className="border-b border-gray-100 hover:bg-gray-50">
+                                            <td className="p-3">{i + 1}</td>
+                                            <td className="p-3">{d.nama}</td>
+                                            <td className="p-3">{d.Sakit}</td>
+                                            <td className="p-3">{d.Izin}</td>
+                                            <td className="p-3">{d.Alpa}</td>
+                                            <td className="p-3">{d.Kesiangan}</td>
+                                            <td className="p-3">{d.Bolos}</td>
+                                            <td className="p-3"><span className={`px-2 py-1 text-xs font-medium rounded-full ${d.status.color}`}>{d.status.text}</span></td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan="8" className="p-4 text-center text-gray-500">Klik "Lihat Data" untuk menampilkan rekap kehadiran.</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+        };
+        
+        // Rekap Kejadian sub-component
+        const RekapKejadian = ({ students, incidents, kelasOptions }) => {
+            const [filters, setFilters] = useState({ kelas: '', startDate: '', endDate: '' });
+            const [rekapData, setRekapData] = useState([]);
+            const [error, setError] = useState(null);
+
+            const handleFilterChange = (e) => {
+                setFilters(prev => ({ ...prev, [e.target.name]: e.target.value }));
+            };
+            
+            // Determine incident status based on total incidents
+            const getStatusKejadian = (total) => {
+                if (total === 0) return { text: 'Baik', color: 'bg-green-100 text-green-800' };
+                if (total >= 1 && total <= 2) return { text: 'Sedang', color: 'bg-blue-100 text-blue-800' };
+                if (total >= 3 && total <= 5) return { text: 'Kurang', color: 'bg-yellow-100 text-yellow-800' };
+                return { text: 'Buruk', color: 'bg-red-100 text-red-800' };
+            };
+
+            // Generate rekap data for incidents (memoized for performance)
+            const generateRekap = useCallback(() => {
+                setError(null);
+                let filteredStudents = students;
+                if (filters.kelas) {
+                    filteredStudents = students.filter(s => s.kelas === filters.kelas);
+                }
+
+                let filteredIncidents = incidents;
+                if (filters.startDate && filters.endDate) {
+                    if (filters.startDate > filters.endDate) {
+                        setError("Tanggal mulai tidak boleh lebih besar dari tanggal akhir.");
+                        setRekapData([]);
+                        return;
+                    }
+                    filteredIncidents = incidents.filter(i => i.tanggal >= filters.startDate && i.tanggal <= filters.endDate);
+                }
+
+                const data = filteredStudents.map(student => {
+                    const studentIncidents = filteredIncidents.filter(i => i.studentId === student.id);
+                    const totalKejadian = studentIncidents.length;
+                    
+                    let keterangan = '-';
+                    if (totalKejadian > 0) {
+                        // Find the most frequent incident type
+                        const incidentCounts = studentIncidents.reduce((acc, curr) => {
+                            acc[curr.jenisKejadian] = (acc[curr.jenisKejadian] || 0) + 1;
+                            return acc;
+                        }, {});
+                        keterangan = Object.keys(incidentCounts).reduce((a, b) => incidentCounts[a] > incidentCounts[b] ? a : b);
+                    }
+                    
+                    const status = getStatusKejadian(totalKejadian);
+
+                    return {
+                        id: student.id,
+                        nama: student.nama,
+                        totalKejadian,
+                        keterangan, // Dominant incident type
+                        status
+                    };
+                });
+                setRekapData(data);
+            }, [students, incidents, filters]);
+
+            // Effect to regenerate rekap when filters or source data changes
+            useEffect(() => {
+                generateRekap();
+            }, [generateRekap]);
+            
+            // Export rekap data to PDF
+            const exportToPDF = () => {
+                const doc = new window.jspdf.jsPDF();
+                doc.text(`Rekap Kejadian - Kelas: ${filters.kelas || 'Semua'}`, 14, 16);
+                if (filters.startDate && filters.endDate) {
+                    doc.text(`Periode: ${filters.startDate} s/d ${filters.endDate}`, 14, 24);
+                }
+                doc.autoTable({
+                    head: [['No', 'Nama', 'Total Kejadian', 'Keterangan Dominan', 'Status']],
+                    body: rekapData.map((d, i) => [i + 1, d.nama, d.totalKejadian, d.keterangan, d.status.text]),
+                    startY: 30,
+                    styles: { fontSize: 8 },
+                    headStyles: { fillColor: '#e5e7eb', textColor: '#4b5563' }
+                });
+                doc.save('rekap-kejadian.pdf');
+            };
+
+            return (
+                <div>
+                    <div className="flex flex-wrap gap-4 items-end mb-4 p-4 bg-gray-50 rounded-lg">
+                        <div className="flex-1 min-w-[150px]">
+                            <label htmlFor="rekapKelasKejadian" className="block text-sm font-medium text-gray-700">Kelas</label>
+                            <select id="rekapKelasKejadian" name="kelas" value={filters.kelas} onChange={handleFilterChange} className="w-full p-2 border rounded-md mt-1 focus:ring-blue-500 focus:border-blue-500">
+                                <option value="">Semua Kelas</option>
+                                {kelasOptions.map(k => <option key={k} value={k}>{k}</option>)}
+                            </select>
+                        </div>
+                        <div className="flex-1 min-w-[150px]">
+                            <label htmlFor="rekapStartDateKejadian" className="block text-sm font-medium text-gray-700">Tanggal Mulai</label>
+                            <input type="date" id="rekapStartDateKejadian" name="startDate" value={filters.startDate} onChange={handleFilterChange} className="w-full p-2 border rounded-md mt-1 focus:ring-blue-500 focus:border-blue-500" />
+                        </div>
+                        <div className="flex-1 min-w-[150px]">
+                            <label htmlFor="rekapEndDateKejadian" className="block text-sm font-medium text-gray-700">Tanggal Akhir</label>
+                            <input type="date" id="rekapEndDateKejadian" name="endDate" value={filters.endDate} onChange={handleFilterChange} className="w-full p-2 border rounded-md mt-1 focus:ring-blue-500 focus:border-blue-500" />
+                        </div>
+                        <button onClick={generateRekap} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors duration-200">Lihat Data</button>
+                        <button onClick={exportToPDF} disabled={rekapData.length === 0} className="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed">Export PDF</button>
+                    </div>
+
+                    {error && (
+                        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+                            <strong className="font-bold">Error!</strong>
+                            <span className="block sm:inline"> {error}</span>
+                        </div>
+                    )}
+
+                    <div className="overflow-x-auto rounded-lg border border-gray-200">
+                        <table className="min-w-full text-left border-collapse text-sm">
+                            <thead className="bg-gray-100">
+                                <tr>
+                                    <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">No</th>
+                                    <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Nama</th>
+                                    <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Total Kejadian</th>
+                                    <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Keterangan Dominan</th>
+                                    <th className="p-3 font-semibold text-gray-600 whitespace-nowrap">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {rekapData.length > 0 ? (
+                                    rekapData.map((d, i) => (
+                                        <tr key={d.id} className="border-b border-gray-100 hover:bg-gray-50">
+                                            <td className="p-3">{i + 1}</td>
+                                            <td className="p-3">{d.nama}</td>
+                                            <td className="p-3">{d.totalKejadian}</td>
+                                            <td className="p-3">{d.keterangan}</td>
+                                            <td className="p-3"><span className={`px-2 py-1 text-xs font-medium rounded-full ${d.status.color}`}>{d.status.text}</span></td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan="5" className="p-4 text-center text-gray-500">Klik "Lihat Data" untuk menampilkan rekap kejadian.</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- App Container ---
+        function App() {
+            const [currentPage, setCurrentPage] = useState('DataSiswa');
+            const [isAuthReady, setIsAuthReady] = useState(false);
+            const [userId, setUserId] = useState(null);
+            const [logoSrc, setLogoSrc] = useState('https://placehold.co/256x256/15803d/FFFFFF?text=LOGO');
+
+            useEffect(() => {
+                const initAuth = async () => {
+                    try {
+                        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("Authentication error:", error);
+                        if (error.code.includes('auth/')) { // If it's an auth error, try to sign in anonymously
+                             try {
+                                 await signInAnonymously(auth);
+                            } catch (fallbackError) {
+                                 console.error("Fallback authentication error:", fallbackError);
+                            }
+                        }
+                    }
+                };
+
+                const unsubscribe = onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        setUserId(user.uid);
+                    } else {
+                        setUserId(null); 
+                    }
+                    setIsAuthReady(true);
+                });
+
+                initAuth();
+                return () => unsubscribe();
+            }, []);
+            
+            const menuItems = [
+                { id: 'DataSiswa', label: 'Data Siswa', icon: 'Users' },
+                { id: 'Kehadiran', label: 'Kehadiran', icon: 'CalendarCheck' },
+                { id: 'Kejadian', label: 'Kejadian', icon: 'AlertTriangle' },
+                { id: 'Rekap', label: 'Rekap', icon: 'BarChart3' },
+            ];
+
+            const renderPage = () => {
+                if (!isAuthReady) {
+                    return <div className="p-6"><p>Inisialisasi aplikasi...</p></div>;
+                }
+                if (!userId) {
+                    return <div className="p-6"><p>Autentikasi gagal. Mohon segarkan halaman.</p></div>;
+                }
+                switch (currentPage) {
+                    case 'DataSiswa':
+                        return <DataSiswa db={db} userId={userId} />;
+                    case 'Kehadiran':
+                        return <Kehadiran db={db} userId={userId} />;
+                    case 'Kejadian':
+                        return <Kejadian db={db} userId={userId} />;
+                    case 'Rekap':
+                        return <Rekap db={db} userId={userId} />;
+                    default:
+                        return <DataSiswa db={db} userId={userId} />;
+                }
+            };
+
+            return (
+                <div className="flex h-screen bg-gray-100">
+                    <aside className="w-48 bg-gray-900 text-white flex flex-col flex-shrink-0">
+                        <div className="p-4 flex flex-col items-center justify-center pt-6 pb-4 border-b border-white/20 relative bg-gradient-to-r from-red-600 to-green-600">
+                            <label htmlFor="logo-upload" className="absolute top-2 right-2 cursor-pointer text-white/70 hover:text-white transition-colors" title="Ganti Logo">
+                                <Icon name="Settings" size={18} />
+                            </label>
+                            <input id="logo-upload" type="file" className="hidden" accept="image/*" onChange={(e) => {
+                                const file = e.target.files[0];
+                                if (file) {
+                                    const reader = new FileReader();
+                                    reader.onload = (ev) => setLogoSrc(ev.target.result);
+                                    reader.readAsDataURL(file);
+                                }
+                            }} />
+                            
+                            <img src={logoSrc} alt="Logo Sekolah" className="w-12 h-12 rounded-full mb-3 object-cover shadow-lg cursor-pointer" onClick={() => document.getElementById('logo-upload').click()} onError={(e) => { e.target.onerror = null; e.target.src='https://placehold.co/256x256/15803d/FFFFFF?text=LOGO'; }}/>
+                            <div className="text-center font-bold title-3d">
+                                <span className="block text-base font-bold bg-gradient-to-r from-red-500 via-white to-white bg-clip-text text-transparent">Sistem Informasi Siswa</span>
+                                <span className="block text-xs text-yellow-300">MTs Yaspika Karangtawang</span>
+                            </div>
+                        </div>
+                        <nav className="flex-1 p-2 space-y-1 bg-gradient-to-b from-red-700 to-blue-800">
+                            {menuItems.map(item => (
+                                <button
+                                    key={item.id}
+                                    onClick={() => setCurrentPage(item.id)}
+                                    className={`sidebar-item w-full text-left flex items-center gap-3 px-3 py-3 rounded-md transition hover:bg-white/10 ${currentPage === item.id ? 'active' : ''}`}
+                                >
+                                    <Icon name={item.icon} size={20} />
+                                    <span className="text-3d">{item.label}</span>
+                                </button>
+                            ))}
+                        </nav>
+                        <div className="p-4 text-center text-xs bg-gradient-to-r from-blue-800 to-red-800">
+                            <p className="font-semibold text-white/90">Created by Herdiyana</p>
+                            <p className="text-white/70">Layanan BK MTs Yaspika</p>
+                        </div>
+                    </aside>
+                    <div className="flex-1 flex flex-col overflow-hidden">
+                        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+                            {renderPage()}
+                        </main>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+
+</body>
+</html>
