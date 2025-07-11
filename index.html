@@ -1,75 +1,112 @@
 <!DOCTYPE html>
 <html lang="id">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sistem Informasi Siswa</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sistem Informasi Siswa</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.5/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  </head>
+  <body class="bg-gray-100 text-gray-900">
+    <div id="root"></div>
+    <script type="text/babel">
+      const {{ useState, useEffect }} = React;
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyCzuHPTqPQt5a14G_tia1dx-wSFK8CP8Nw",
-      authDomain: "sistem-informasi-siswa-41025.firebaseapp.com",
-      projectId: "sistem-informasi-siswa-41025",
-      storageBucket: "sistem-informasi-siswa-41025.firebasestorage.app",
-      messagingSenderId: "566617915457",
-      appId: "1:566617915457:web:da339cb25463512b8586c0"
-    };
+      function App() {{
+        const [tab, setTab] = useState("siswa");
+        const [data, setData] = useState([]);
+        const [input, setInput] = useState({{ nama: "", nis: "", kelas: "", jenis_kelamin: "" }});
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+        const handleChange = (e) => {{
+          const {{ name, value }} = e.target;
+          setInput((prev) => ({{ ...prev, [name]: value }}));
+        }};
 
-    async function simpanData() {
-      const nama = document.getElementById("nama").value;
-      const nis = document.getElementById("nis").value;
-      const kelas = document.getElementById("kelas").value;
-      const jk = document.getElementById("jk").value;
+        const handleSubmit = () => {{
+          if (input.nama && input.nis) {{
+            setData([...data, input]);
+            setInput({{ nama: "", nis: "", kelas: "", jenis_kelamin: "" }});
+          }}
+        }};
 
-      if (nama && nis && kelas && jk) {
-        await addDoc(collection(db, "siswa"), { nama, nis, kelas, jk });
-        alert("Data berhasil disimpan!");
-        document.getElementById("form").reset();
-        tampilkanData();
-      }
-    }
+        const tabs = [
+          {{ id: "siswa", label: "Data Siswa" }},
+          {{ id: "kehadiran", label: "Kehadiran" }},
+          {{ id: "kejadian", label: "Kejadian" }},
+          {{ id: "rekap", label: "Rekap" }},
+        ];
 
-    async function tampilkanData() {
-      const snapshot = await getDocs(collection(db, "siswa"));
-      const list = document.getElementById("daftar");
-      list.innerHTML = "";
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        const div = document.createElement("div");
-        div.className = "p-2 border-b";
-        div.textContent = `NIS: ${data.nis} | Nama: ${data.nama} | Kelas: ${data.kelas} | JK: ${data.jk}`;
-        list.appendChild(div);
-      });
-    }
+        return (
+          <div className="max-w-4xl mx-auto p-4">
+            <h1 className="text-2xl font-bold text-center mb-4">Sistem Informasi Siswa</h1>
+            <div className="flex space-x-2 mb-4 justify-center">
+              {{tabs.map((t) => (
+                <button
+                  key={{t.id}}
+                  className={`px-4 py-2 rounded ${
+                    tab === t.id ? "bg-blue-600 text-white" : "bg-white border"
+                  }`}
+                  onClick={{() => setTab(t.id)}}
+                >
+                  {{t.label}}
+                </button>
+              ))}}
+            </div>
+            {tab === "siswa" && (
+              <div className="bg-white p-4 rounded shadow">
+                <h2 className="text-lg font-semibold mb-4">Tambah Data Siswa</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <input
+                    type="text"
+                    name="nis"
+                    value={input.nis}
+                    onChange={handleChange}
+                    placeholder="NIS"
+                    className="p-2 border rounded w-full"
+                  />
+                  <input
+                    type="text"
+                    name="nama"
+                    value={input.nama}
+                    onChange={handleChange}
+                    placeholder="Nama"
+                    className="p-2 border rounded w-full"
+                  />
+                  <input
+                    type="text"
+                    name="kelas"
+                    value={input.kelas}
+                    onChange={handleChange}
+                    placeholder="Kelas"
+                    className="p-2 border rounded w-full"
+                  />
+                  <select
+                    name="jenis_kelamin"
+                    value={input.jenis_kelamin}
+                    onChange={handleChange}
+                    className="p-2 border rounded w-full"
+                  >
+                    <option value="">Pilih Jenis Kelamin</option>
+                    <option value="L">Laki-laki</option>
+                    <option value="P">Perempuan</option>
+                  </select>
+                </div>
+                <button
+                  onClick={handleSubmit}
+                  className="bg-blue-600 text-white px-4 py-2 rounded"
+                >
+                  Simpan
+                </button>
 
-    window.onload = tampilkanData;
-    window.simpanData = simpanData;
-  </script>
-</head>
-<body class="bg-gray-100 text-gray-800">
-  <div class="max-w-2xl mx-auto p-4">
-    <h1 class="text-2xl font-bold mb-4 text-center">Sistem Informasi Siswa</h1>
-    <form id="form" class="bg-white p-4 rounded shadow mb-6 space-y-4">
-      <input id="nis" type="text" placeholder="NIS" class="w-full p-2 border rounded" required />
-      <input id="nama" type="text" placeholder="Nama" class="w-full p-2 border rounded" required />
-      <input id="kelas" type="text" placeholder="Kelas" class="w-full p-2 border rounded" required />
-      <select id="jk" class="w-full p-2 border rounded" required>
-        <option value="">Pilih Jenis Kelamin</option>
-        <option value="L">Laki-laki</option>
-        <option value="P">Perempuan</option>
-      </select>
-      <button type="button" onclick="simpanData()" class="w-full bg-blue-600 text-white p-2 rounded">Simpan</button>
-    </form>
-    <div class="bg-white p-4 rounded shadow">
-      <h2 class="text-lg font-bold mb-2">Data Siswa</h2>
-      <div id="daftar" class="space-y-2"></div>
-    </div>
-  </div>
-</body>
-</html>
+                <div className="mt-6">
+                  <h3 className="t
+            {tab === "kehadiran" && (
+              <div className="bg-white p-4 rounded shadow">
+                <h2 className="text-lg font-semibold mb-2">Kehadiran</h2>
+                <p className="text-sm text-gray-600">(fitur dalam pengembangan)</p>
+              </div>
+            )
